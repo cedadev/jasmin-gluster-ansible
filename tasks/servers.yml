@@ -1,58 +1,29 @@
-#
-# Copyright StackHPC, 2018
-#
 ---
 
-- name: Install repos
+- name: Install EPEL release
   package:
-    name: "{{ item }}"
-  with_items:
-    - epel-release
-
-- name: Ensure Gluster 3.x Centos repository is absent
-  package:
-    name: "{{ item }}"
-    state: absent
-  become: yes
-  with_items:
-    - centos-release-gluster
-
-- name: Gluster-4.1 repo
-  yum_repository:
-    name: centos-gluster-4.1
-    description: CentOS Storage SIG repo for gluster 4.1
-    baseurl: http://mirror.centos.org/centos/$releasever/storage/$basearch/gluster-4.1
-    gpgkey: https://raw.githubusercontent.com/CentOS-Storage-SIG/centos-release-storage-common/master/RPM-GPG-KEY-CentOS-SIG-Storage
-    enabled: yes
-  become: yes
-
-# This is not required in all setups, but can save a task where it is needed
-- name: Install Infiniband packages
-  package:
-    name:
-    - '@InfiniBand Support'
-    - perftest
-    - infiniband-diags
-    - glusterfs-rdma
+    name: epel-release
     state: present
-  become: yes
-  when: gluster_cluster_transport_mode == "rdma"
 
-- name: Install Gluster packages
+- name: Install Gluster repository
   package:
-    name:
-    - glusterfs-server
-    - glusterfs-client
-    - glusterfs-fuse
-    state: present
-  become: yes
+    name: centos-release-gluster
+    state: latest
+
+- name: Populate service facts
+  service_facts:
+
+- name: Stop glusterd
+  service:
+    name: glusterd
+    state: stopped
+  when: "'glusterd.service' in ansible_facts.services"
 
 - name: Format bricks
   filesystem:
     fstype: xfs
     opts: -f -i size=512 -n size=8192 -d su=128k,sw=10
     dev: "/dev/{{ item }}"
-  become: yes
   with_items: "{{ gluster_cluster_block_devices }}"
 
 - name: Update fstab and mount bricks
@@ -62,15 +33,28 @@
     fstype: xfs
     state: mounted
     opts: rw,inode64,noatime,nouuid
-  become: yes
   with_items: "{{ gluster_cluster_block_devices }}"
+
+- name: Install Infiniband packages
+  package:
+    name:
+      - '@InfiniBand Support'
+      - perftest
+      - infiniband-diags
+      - glusterfs-rdma
+    state: latest
+  when: gluster_cluster_transport_mode == "rdma"
+
+- name: Install Gluster server package
+  package:
+    name: glusterfs-server
+    state: latest
 
 - name: Start and enable RDMA service (loads required kernel modules)
   service:
     name: rdma
     enabled: yes
     state: started
-  become: yes
   when: gluster_cluster_transport_mode == "rdma"
 
 - name: Start and enable glusterd
@@ -78,20 +62,21 @@
     name: glusterd
     enabled: yes
     state: started
-  become: yes
 
 - name: Create a trusted storage pool
   gluster_peer:
-    state: present
     nodes: "{{ gluster_cluster_hosts }}"
-  become: true
+    state: present
   run_once: true
 
 - name: Create Gluster volume
   gluster_volume:
-    state: present
     name: "{{ gluster_cluster_volume_name }}"
-    bricks: "{% for item in gluster_cluster_block_devices %}{{ gluster_cluster_volume_base_path }}/{{ gluster_cluster_volume_name }}/{{ item }}/brick{% if not loop.last %},{% endif %}{% endfor %}"
+    state: present
+    bricks: >-
+      {%- for item in gluster_cluster_block_devices -%}
+      {{ gluster_cluster_volume_base_path }}/{{ gluster_cluster_volume_name }}/{{ item }}/brick{%- if not loop.last -%},{%- endif -%}
+      {%- endfor -%}
     force: true
     cluster: "{{ gluster_cluster_hosts }}"
     transport: "{{ gluster_cluster_transport_mode }}"
@@ -100,12 +85,10 @@
     replicas: "{{ gluster_cluster_replicas | default(0) }}"
     redundancies: "{{ gluster_cluster_redundancies | default(0) }}"
     options: "{{ gluster_cluster_volume_options | default(omit) }}"
-  become: yes
   run_once: true
 
 - name: Ensure Gluster volume is started
   gluster_volume:
     name: "{{ gluster_cluster_volume_name }}"
     state: started
-  become: yes
   run_once: true
