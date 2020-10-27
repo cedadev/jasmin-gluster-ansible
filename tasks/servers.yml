@@ -8,16 +8,7 @@
 - name: Install Gluster repository
   package:
     name: centos-release-gluster
-    state: latest
-
-- name: Populate service facts
-  service_facts:
-
-- name: Stop glusterd
-  service:
-    name: glusterd
-    state: stopped
-  when: "'glusterd.service' in ansible_facts.services"
+    state: present
 
 - name: Format bricks
   filesystem:
@@ -42,13 +33,13 @@
       - perftest
       - infiniband-diags
       - glusterfs-rdma
-    state: latest
+    state: present
   when: gluster_cluster_transport_mode == "rdma"
 
 - name: Install Gluster server package
   package:
     name: glusterfs-server
-    state: latest
+    state: present
 
 - name: Start and enable RDMA service (loads required kernel modules)
   service:

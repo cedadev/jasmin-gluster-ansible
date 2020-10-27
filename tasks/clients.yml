@@ -7,7 +7,7 @@
 - name: Install Gluster repository
   package:
     name: centos-release-gluster
-    state: latest
+    state: present
 
 - name: Install Infiniband packages
   package:
@@ -24,7 +24,7 @@
     name:
       - glusterfs-client
       - glusterfs-fuse
-    state: latest
+    state: present
 
 - name: Start and enable RDMA service (loads required kernel modules)
   service:
